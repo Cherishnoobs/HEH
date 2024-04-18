@@ -5,10 +5,53 @@ from torch.autograd import Function
 import torchvision.datasets as dsets
 from torchvision import transforms
 from torch.autograd import Variable
-
+import torchvision
+import math
 import numpy as np
-from tools import build_G_from_S
+from tools import build_G_from_S, cal_sim
 import settings
+
+
+def compress_ab(train_loader, test_loader, model_I, model_T, train_dataset, test_dataset):
+    re_BI = list([])
+    re_BT = list([])
+    re_L = list([])
+    for _, (data_I, data_T, _, _) in enumerate(train_loader):
+        with torch.no_grad():
+            var_data_I = Variable(data_I.cuda())
+            _,_,code_I = model_I(var_data_I)
+        code_I = torch.sign(code_I)
+        re_BI.extend(code_I.cpu().data.numpy())
+        
+        var_data_T = Variable(torch.FloatTensor(data_T.numpy()).cuda())
+        _,_,code_T = model_T(var_data_T)
+        code_T = torch.sign(code_T)
+        re_BT.extend(code_T.cpu().data.numpy())
+
+    qu_BI = list([])
+    qu_BT = list([])
+    qu_L = list([])
+    for _, (data_I, data_T, _, _) in enumerate(test_loader):
+        with torch.no_grad():
+            var_data_I = Variable(data_I.cuda())
+            _,_,code_I = model_I(var_data_I)
+        code_I = torch.sign(code_I)
+        qu_BI.extend(code_I.cpu().data.numpy())
+        
+        var_data_T = Variable(torch.FloatTensor(data_T.numpy()).cuda())
+        _,_,code_T = model_T(var_data_T)
+        code_T = torch.sign(code_T)
+        qu_BT.extend(code_T.cpu().data.numpy())
+
+    re_BI = np.array(re_BI)
+    re_BT = np.array(re_BT)
+    re_L = train_dataset.train_labels
+
+    qu_BI = np.array(qu_BI)
+    qu_BT = np.array(qu_BT)
+    qu_L = test_dataset.train_labels
+    return re_BI, re_BT, re_L, qu_BI, qu_BT, qu_L
+
 
 def compress_wiki(train_loader, test_loader, modeli, modelt, train_dataset, test_dataset, classes=10):
     re_BI = list([])
@@ -67,8 +110,9 @@ def compress_nus(train_loader, test_loader, model_I, model_T, train_dataset, tes
         S_T = torch.mm(F_T, F_T.t())
         S_high_crs =  F.normalize(S_I).mm(F.normalize(S_T).t())
         if settings.DATASET == "MSCOCO":
-            sim1_database = 0.5 * S_I + 0.1 * S_T + 0.4 * (S_high_crs + S_high_crs.t()) / 2
+            sim1_database = 0.4 * S_I + 0.2 * S_T + 0.4 * (S_high_crs + S_high_crs.t()) / 2
             sim1_database = sim1_database  * 1.4
+            # sim1_database = cal_sim(S_I=S_I, S_T=S_T, S_F=S_high_crs)* 1.4
         # elif settings.DATASET == "NUSWIDE":
         else:
             sim1_database = 0.4 * S_I + 0.3 * S_T + 0.3 * (S_high_crs + S_high_crs.t()) / 2

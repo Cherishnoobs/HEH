@@ -201,7 +201,7 @@ if settings.DATASET == "MIRFlickr":
 if settings.DATASET == "NUSWIDE":
 
     label_set = scio.loadmat(settings.LABEL_DIR)
-    label_set = np.array(label_set['LAll'], dtype=np.float32)
+    label_set = np.array(label_set['LAll'], dtype=np.float)
     txt_file = h5py.File(settings.TXT_DIR)
     txt_set = np.array(txt_file['YAll']).transpose()
     txt_file.close()
@@ -291,16 +291,17 @@ if settings.DATASET == "NUSWIDE":
             return len(self.train_labels)
 
 if settings.DATASET == "MSCOCO":
-    label_file = h5py.File(settings.LABEL_DIR)
-    label_set = np.array(label_file['LAll'], dtype=np.float)
-    txt_file = h5py.File(settings.TXT_DIR)
-    txt_set = np.array(txt_file['YAll'], dtype=np.float)
-    label_file.close()
-    txt_file.close()
+    # label_file = h5py.File(settings.LABEL_DIR)
+    # label_set = np.array(label_file['LAll'], dtype=np.float32)
+    # txt_file = h5py.File(settings.TXT_DIR)
+    # txt_set = np.array(txt_file['YAll'], dtype=np.float)
+    # label_file.close()
+    # txt_file.close()
+    
 
-    test_index = np.random.randint(low=0, high = 40137, size = 5000, dtype='l')
-    train_index = np.random.randint(low=40137, high = label_set.shape[0], size = 10000, dtype='l')
-    database_index = np.array([i for i in range(label_set.shape[0]) if i not in (list(test_index) )])
+    # test_index = np.random.randint(low=0, high = 40137, size = 5000, dtype='l')
+    # train_index = np.random.randint(low=40137, high = label_set.shape[0], size = 10000, dtype='l')
+    # database_index = np.array([i for i in range(label_set.shape[0]) if i not in (list(test_index) )])
     # first = True
 
     # for label in range(label_set.shape[1]):
@@ -321,9 +322,29 @@ if settings.DATASET == "MSCOCO":
 
     # database_index = np.array([i for i in range(label_set.shape[0]) if i not in (list(test_index))])
     
-    indexTest = test_index
-    indexDatabase = database_index
-    indexTrain = train_index
+
+
+    indexTest = np.arange(2001)
+    indexDatabase = np.arange(121288)
+    indexTrain = np.arange(5001)
+
+
+    train_set = scio.loadmat('/home/crossai/chuchenglong/code/datasets/coco/COCO_train.mat')
+    train_L = np.array(train_set['L_tr'], dtype=np.float32)
+    train_x = np.array(train_set['I_tr'], dtype=np.float32)
+    train_y = np.array(train_set['T_tr'], dtype=np.float32)
+
+    test_set = scio.loadmat('/home/crossai/chuchenglong/code/datasets/coco/COCO_query.mat')
+    query_L = np.array(test_set['L_te'], dtype=np.float32)
+    query_x = np.array(test_set['I_te'], dtype=np.float32)
+    query_y = np.array(test_set['T_te'], dtype=np.float32)
+
+    db_set = h5py.File('/home/crossai/chuchenglong/code/datasets/coco/COCO_database.mat')
+    retrieval_L = np.array(db_set['L_db'], dtype=np.float32).T
+    retrieval_x = np.array(db_set['I_db'], dtype=np.float32).T
+    retrieval_y = np.array(db_set['T_db'], dtype=np.float32).T
+
+
     coco_train_transform = transforms.Compose([
         transforms.RandomHorizontalFlip(),
         transforms.Resize(256),
@@ -339,7 +360,8 @@ if settings.DATASET == "MSCOCO":
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
 
-    txt_feat_len = txt_set.shape[1]
+    txt_feat_len = query_y.shape[1]
+    print(txt_feat_len)
 
     class MSCOCO(torch.utils.data.Dataset):
 
@@ -347,33 +369,39 @@ if settings.DATASET == "MSCOCO":
             self.transform = transform
             self.target_transform = target_transform
             if train:
-                self.train_labels = label_set[indexTrain]
+                self.train_labels = train_L 
                 self.train_index = indexTrain
-                self.txt = txt_set[indexTrain]
+                self.txt = train_y
+                self.img = train_x
+
             elif database:
-                self.train_labels = label_set[indexDatabase]
+
+                self.train_labels = retrieval_L
                 self.train_index = indexDatabase
-                self.txt = txt_set[indexDatabase]
+                self.txt = retrieval_y
+                self.img = retrieval_x
             else:
-                self.train_labels = label_set[indexTest]
+                self.train_labels = query_L
                 self.train_index = indexTest
-                self.txt = txt_set[indexTest]
+                self.txt = query_y
+                self.img = query_x
     
         def __getitem__(self, index):
 
-            mscoco = h5py.File(settings.IMG_DIR,'r', libver='latest', swmr=True )
-            img, target = mscoco['IAll'][self.train_index[index]], self.train_labels[index]
-            img = Image.fromarray(np.array(img, dtype=np.uint8))
-            mscoco.close()
+            # mscoco = h5py.File(settings.IMG_DIR,'r', libver='latest', swmr=True )
+            # img, target = mscoco['IAll'][self.train_index[index]], self.train_labels[index]
+            # img = Image.fromarray(np.array(img, dtype=np.uint8))
+            # mscoco.close()
 
             txt = self.txt[index]
-
+            img = self.img[index]
+            target = self.train_index[index]
             if self.transform is not None:
-                img = self.transform(img)
-
+                # img = self.transform(img)
+                pass
             if self.target_transform is not None:
-                target = self.target_transform(target)
-
+                # target = self.target_transform(target)
+                pass
             return img, txt, target, index
     
         def __len__(self):

@@ -4,17 +4,17 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import datasets
 import settings
-from model import  ImgNet_V1, TxtNet_V1, ImgNet_ab, TxtNet_ab
-from metric import compress_wiki, compress_nus,compress,compress_ab, calculate_top_map, load_feature_construct_H, generate_G_from_H,calculate_map
+from model import  ImgNet_V1, TxtNet_V1, ImgNet, TxtNet
+from metric import compress_wiki, compress_nus,compress, calculate_top_map, load_feature_construct_H, generate_G_from_H,calculate_map
 import os.path as osp
 import random
 import numpy as np
 import copy
-from tools import build_G_from_S, generate_robust_S, cal_sim
+from tools import build_G_from_S, generate_robust_S
 import csv
 from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
-import math
+
 writer = SummaryWriter('HCAC/log')
 #返回 归一化后 的数据集图文特征，其中图像特征为基于预训练模型提取的特征，文本特征为数据集自带的特征
 def extract_features(img_model, dataloader, feature_loader):
@@ -129,42 +129,27 @@ dim = sample_num
 
 F_I = feature_img
 S_I = F_I.mm(F_I.t())
-# S_I = torch.cdist(F_I, F_I)
-# S_I= torch.tanh(-settings.sssc * S_I)
-
 F_T = feature_txt
 S_T = F_T.mm(F_T.t())
-# S_T= torch.cdist(F_T, F_T)
-# S_T= torch.tanh(-settings.sssc * S_T)
 
 settings.logger.info('dataset %s, nnk %.4f, nno %.4f, total epoch %d, eval interval %d, sim1 %.4f' % (settings.DATASET, settings.nnk, nno,  settings.NUM_EPOCH, settings.EVAL_INTERVAL,settings.sim1))
 
 
 S_high_crs = F.normalize(S_I).mm(F.normalize(S_T).t())
-
-# 调参注释
-if settings.DATASET == "MIRFlickr" :
+if settings.DATASET == "MIRFlickr" or settings.DATASET == "MSCOCO":
     sim1 = 0.5 * S_I + 0.1 * S_T + 0.4 * (S_high_crs + S_high_crs.t()) / 2
     sim1 = sim1  * 1.4
 # else settings.DATASET == "NUSWIDE":
-elif  settings.DATASET == "MSCOCO":
-    sim1 = 0.4 * S_I + 0.2 * S_T + 0.4 * (S_high_crs + S_high_crs.t()) / 2
-    sim1 = sim1  * 1.4
 else:
     sim1 = 0.4 * S_I + 0.3 * S_T + 0.3 * (S_high_crs + S_high_crs.t()) / 2
     sim1 = sim1  * 1.4
-# end
-
 # else:
 #     sim1 = 0.4 * S_I + 0.3 * S_T + 0.3 * (S_high_crs + S_high_crs.t()) / 2
 #     sim = sim1 * 1.4
 # final_sim = random_walk(sim1, dim)
-# final_sim = sim1
-
-# 调参注释
 final_sim = sim1
+
 del S_I, S_T, S_high_crs, sim1
-# end
 
 if settings.DATASET == "WIKI":
     sample_num = len(feature_loader_test.dataset.label)
@@ -179,45 +164,23 @@ feature_txt_test = global_txts_test
 
 F_I_test = feature_img_test
 S_I_test = F_I_test.mm(F_I_test.t())
-# S_I_test = torch.cdist(F_I_test, F_I_test)
-# S_I_test = torch.tanh(-settings.sssc * S_I_test)
-
 F_T_test = feature_txt_test
 S_T_test = F_T_test.mm(F_T_test.t())
-# S_T_test = torch.cdist(F_T_test, F_T_test)
-# S_T_test = torch.tanh(-settings.sssc * S_I_test)
 
 S_high_crs_test = F.normalize(S_I_test).mm(F.normalize(S_T_test).t())
- 
-# 调参注释
-if settings.DATASET == "MIRFlickr" :
+if settings.DATASET == "MIRFlickr" or settings.DATASET == "MSCOCO":
 
     sim1_test = 0.5 * S_I_test + 0.1 * S_T_test + 0.4 * (S_high_crs_test + S_high_crs_test.t()) / 2
     sim1_test = sim1_test  * 1.4
-elif settings.DATASET == "MSCOCO":
-    sim1_test = 0.4 * S_I_test + 0.2 * S_T_test + 0.4 * (S_high_crs_test + S_high_crs_test.t()) / 2
-    sim1_test = sim1_test  * 1.4 
 else:
     sim1_test = 0.4 * S_I_test + 0.3 * S_T_test + 0.3 * (S_high_crs_test + S_high_crs_test.t()) / 2
     sim1_test = sim1_test  * 1.4
-# end
-
-
 # else:
 #     sim1 = 0.4 * S_I_test + 0.3 * S_T_test + 0.3 * (S_high_crs_test + S_high_crs_test.t()) / 2
 #     sim1_test = sim1  * 1.4
 # final_sim_test = 2 * sim1_test -1
-
-# 调参注释
 final_sim_test = sim1_test
-# end
-
-# final_sim_test = S_high_crs_test * 1.4
-# final_sim_test = (0.9 * S_I_test + 0.1 * S_T_test) * 1.4
-
-# 调参注释
 del S_I_test, S_T_test, S_high_crs_test, sim1_test
-# end
 
 #################### 数据库样本的G构建 ##############
 
@@ -236,19 +199,13 @@ if settings.DATASET != 'NUSWIDE' and settings.DATASET != 'MSCOCO':
 
         F_I_database = feature_img_database
         S_I_database = F_I_database.mm(F_I_database.t())
-        # S_I_database = torch.cdist(F_I_database, F_I_database)
-        # S_I_database = torch.tanh(-settings.alpha * S_I_database)
         F_T_database = feature_txt_database
         S_T_database = F_T_database.mm(F_T_database.t())
-        # S_T_database = torch.cdist(F_T_database, F_T_database)
-        # S_T_database = torch.tanh(-settings.sssc * S_T_database)
-        
 
         S_high_crs_database = F.normalize(S_I_database).mm(F.normalize(S_T_database).t())
         if settings.DATASET == "MIRFlickr":
             sim1_database = 0.5 * S_I_database + 0.1 * S_T_database + 0.4 * (S_high_crs_database + S_high_crs_database.t()) / 2
             sim1_database = sim1_database  * 1.4
-            
         elif settings.DATASET == "NUSWIDE":
             sim1_database = 0.4 * S_I_database + 0.3 * S_T_database + 0.3 * (S_high_crs_database + S_high_crs_database.t()) / 2
             sim1_database = sim1_database  * 1.4
@@ -258,14 +215,10 @@ if settings.DATASET != 'NUSWIDE' and settings.DATASET != 'MSCOCO':
 
         final_sim_database = sim1_database
         del S_I_database, S_T_database, S_high_crs_database, sim1_database
-
 else:
         final_sim_database = 0
 
-
-
-
-# torch.cuda.empty_cache()
+torch.cuda.empty_cache()
 
 class Session:
     def __init__(self):
@@ -275,18 +228,9 @@ class Session:
         
         self.CodeNet_I = ImgNet_V1(code_len=settings.CODE_LEN)
         self.FeatNet_I = ImgNet_V1(code_len=settings.CODE_LEN)
-        # self.CodeNet_I = ImgNet_ab(code_len=settings.CODE_LEN)
-        # self.FeatNet_I = ImgNet_ab(code_len=settings.CODE_LEN)
-
-
-        # self.CodeNet_I = torch.compile(ImgNet_V1(code_len=settings.CODE_LEN))
-        # self.FeatNet_I = torch.compile(ImgNet_V1(code_len=settings.CODE_LEN))
 
         txt_feat_len = datasets.txt_feat_len
         self.CodeNet_T = TxtNet_V1(code_len=settings.CODE_LEN, txt_feat_len=txt_feat_len)
-        # self.CodeNet_T = TxtNet_ab(code_len=settings.CODE_LEN, txt_feat_len=txt_feat_len)
-        # self.CodeNet_T = torch.compile(TxtNet_V1(code_len=settings.CODE_LEN, txt_feat_len=txt_feat_len))
-
 
         if settings.DATASET == "WIKI":
             self.opt_I = torch.optim.SGD(self.CodeNet_I.parameters(), lr=settings.LR_IMG, momentum=settings.MOMENTUM, weight_decay=settings.WEIGHT_DECAY)
@@ -296,16 +240,12 @@ class Session:
 
         self.opt_T = torch.optim.SGD(self.CodeNet_T.parameters(), lr=settings.LR_TXT, momentum=settings.MOMENTUM, weight_decay=settings.WEIGHT_DECAY)
           
-        self.final_sim = 2 * final_sim - 1.0
-        S = self.final_sim 
-        
-        ## lambda
-        # S_temp  = 2 * final_sim - 1.0
-        # S_temp = S_temp.cpu().numpy()
-        # S_ = generate_robust_S(S_temp, settings.alpha, settings.beta)
-        # self.final_sim = torch.FloatTensor(S_).cuda()
-
-
+        # self.final_sim = 2 * final_sim - 1.0
+        # # S = self.final_sim
+        S_temp  = 2 * final_sim - 1.0
+        S_temp = S_temp.cpu().numpy()
+        S_ = generate_robust_S(S_temp, settings.alpha, settings.beta)
+        self.final_sim = torch.FloatTensor(S_).cuda()
         # S_temp= final_sim.cpu().numpy()
         # S_ = generate_robust_S(S_temp, settings.alpha, settings.beta)
         # self.final_sim = torch.FloatTensor(2 * S_ - 1.0).cuda()
@@ -314,9 +254,9 @@ class Session:
         # self.final_sim = torch.FloatTensor(S).cuda()
 # 画图
     def show_disturbtion(self):
-        S = 2*final_sim-1.0
+        S = final_sim
         S = S.cpu().numpy()
-        S = generate_robust_S(S, settings.alpha,settings.beta)
+        S = generate_robust_S(S, 2,2)
         print(S.shape)
 
     def train(self, epoch):
@@ -350,8 +290,7 @@ class Session:
             _, hid_I, code_I = self.CodeNet_I(img, G)
             _, hid_T, code_T = self.CodeNet_T(txt, G)
 
-            # _, hid_I, code_I = self.CodeNet_I(img)
-            # _, hid_T, code_T = self.CodeNet_T(txt)
+
 
             B_I = F.normalize(code_I)
             B_T = F.normalize(code_T)
@@ -410,17 +349,17 @@ class Session:
             # contra_loss2 = torch.sum(-torch.log(Numerator/Dominator))
             
             # loss5 = 0.5 * (contra_loss1 + contra_loss2)
-            # loss = settings.LAMBDA1 * loss1 + 1 * loss2  + settings.LAMBDA2 * loss3 + settings.l4 * loss4 
+            loss = settings.LAMBDA1 * loss1 + 1 * loss2  + settings.LAMBDA2 * loss3 + settings.l4 * loss4 
             # loss = settings.LAMBDA1 * loss1 + settings.LAMBDA2 * loss3 + settings.l4 * loss4 
-            loss = settings.LAMBDA1 * loss1 + settings.LAMBDA3 * loss2  + settings.LAMBDA2 * loss3 + settings.l4 * loss4 + settings.l5 * loss5
+            # loss = settings.LAMBDA1 * loss1 + 1 * loss2  + settings.LAMBDA2 * loss3 + settings.l4 * loss4 + settings.l5 * loss5
             # writer.add_scalar('loss', loss, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
 
             # record loss by tensorboardX
-            writer.add_scalar('loss1', settings.LAMBDA1 *loss1, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
+            writer.add_scalar('loss1', loss1, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
             writer.add_scalar('loss2', loss2, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
-            writer.add_scalar('loss3', settings.LAMBDA2 *loss3, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
-            writer.add_scalar('loss4', settings.l4 *loss4, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
-            # writer.add_scalar('loss5', settings.l5 *loss5, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
+            writer.add_scalar('loss3', loss3, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
+            writer.add_scalar('loss4', loss4, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
+            writer.add_scalar('loss5', loss5, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
             writer.add_scalar('loss', loss, epoch * len(train_dataset) // settings.BATCH_SIZE + idx)
 
             loss.backward()
@@ -446,13 +385,10 @@ class Session:
             re_BI, re_BT, re_L, qu_BI, qu_BT, qu_L = compress(database_loader, test_loader, self.CodeNet_I, self.CodeNet_T, database_dataset, test_dataset, final_sim_database, final_sim_test)
         if settings.DATASET == "NUSWIDE" or settings.DATASET == "MSCOCO":
             re_BI, re_BT, re_L, qu_BI, qu_BT, qu_L = compress_nus(database_loader, test_loader, self.CodeNet_I, self.CodeNet_T, database_dataset, test_dataset, final_sim_test)
-        MAP_I2T = calculate_top_map(qu_B=qu_BI, re_B=re_BT, qu_L=qu_L, re_L=re_L, topk=50)
-        # self.logger.info('MAP of Image to Text: %.3f,' % (MAP_I2T))
-
-        # MAP_I2T = calculate_map(qu_B=qu_BI, re_B=re_BT, qu_L=qu_L, re_L=re_L)
-        MAP_T2I = calculate_top_map(qu_B=qu_BT, re_B=re_BI, qu_L=qu_L, re_L=re_L, topk=50)
-
-        # MAP_T2I = calculate_map(qu_B=qu_BT, re_B=re_BI, qu_L=qu_L, re_L=re_L)
+        # MAP_I2T = calculate_top_map(qu_B=qu_BI, re_B=re_BT, qu_L=qu_L, re_L=re_L, topk=50)
+        MAP_I2T = calculate_map(qu_B=qu_BI, re_B=re_BT, qu_L=qu_L, re_L=re_L)
+        # MAP_T2I = calculate_top_map(qu_B=qu_BT, re_B=re_BI, qu_L=qu_L, re_L=re_L, topk=50)
+        MAP_T2I = calculate_map(qu_B=qu_BT, re_B=re_BI, qu_L=qu_L, re_L=re_L)
         # MAP_T2I = calculate_top_recall(qu_B=qu_BT, re_B=re_BI, qu_L=qu_L, re_L=re_L, topk=50)
         # MAP_I2T = calculate_top_recall(qu_B=qu_BI, re_B=re_BT, qu_L=qu_L, re_L=re_L, topk=50)
         # if settings.DATASET == "WIKI":
@@ -465,7 +401,6 @@ class Session:
         # MAP_T2I = calculate_top_map(qu_B=qu_BT, re_B=re_BI, qu_L=qu_L, re_L=re_L, topk=50)
         
         # draw_pr_curve(qu_B=qu_BT, re_B=re_BI, qu_L=qu_L, re_L=re_L, topk= -1)
-        # self.logger.info('MAP of Image to Text: %.3f, MAP of Text to Image: %.3f   avgI2T: %.4f avgT2I: %.4f bestPair:(%.3f,%.3f) evalNum:%d' % (MAP_I2T, MAP_T2I,avgScore[0],avgScore[1],avgScore[3],avgScore[4],avgScore[2]))
 
         # draw_PN_curve(qu_B=qu_BT, re_B=re_BI, qu_L=qu_L, re_L=re_L, max_topK=5000, save_name='PN_T2I')
         # draw_PN_curve(qu_B=qu_BI, re_B=re_BT, qu_L=qu_L, re_L=re_L, max_topK=5000, save_name='PN_I2T')
@@ -475,26 +410,26 @@ class Session:
         if MAP_I2T + MAP_T2I >= avgScore[3] + avgScore[4]:
             avgScore[3] = MAP_I2T
             avgScore[4] = MAP_T2I
-        #     name = ('%s_%dbit_%dbatch_best_checkpoint.pth' %(settings.DATASET, settings.CODE_LEN, settings.BATCH_SIZE))
-        #     ckp_path = osp.join(settings.MODEL_DIR, name)
-        #     obj = {
-        #     'ImgNet': self.CodeNet_I.state_dict(),
-        #     'TxtNet': self.CodeNet_T.state_dict(),
-        #     'step': avgScore[2] + 1,
-        # }
-        #     torch.save(obj, ckp_path)
-            # self.logger.info('**********Save the trained model successfully.**********')
-        self.logger.info('K = %f, MAP of Image to Text: %.3f, MAP of Text to Image: %.3f   avgI2T: %.4f avgT2I: %.4f bestPair:(%.3f,%.3f) evalNum:%d' % (settings.K, MAP_I2T, MAP_T2I,avgScore[0],avgScore[1],avgScore[3],avgScore[4],avgScore[2]))
+            name = ('%s_%dbit_%dbatch_best_checkpoint.pth' %(settings.DATASET, settings.CODE_LEN, settings.BATCH_SIZE))
+            ckp_path = osp.join(settings.MODEL_DIR, name)
+            obj = {
+            'ImgNet': self.CodeNet_I.state_dict(),
+            'TxtNet': self.CodeNet_T.state_dict(),
+            'step': avgScore[2] + 1,
+        }
+            # torch.save(obj, ckp_path)
+            self.logger.info('**********Save the trained model successfully.**********')
+        self.logger.info('MAP of Image to Text: %.3f, MAP of Text to Image: %.3f   avgI2T: %.4f avgT2I: %.4f bestPair:(%.3f,%.3f) evalNum:%d' % (MAP_I2T, MAP_T2I,avgScore[0],avgScore[1],avgScore[3],avgScore[4],avgScore[2]))
         self.logger.info('--------------------------------------------------------------------')
 
         # record MAP by tensorboardX
         writer.add_scalar('MAP_I2T', MAP_I2T, avgScore[2])
         writer.add_scalar('MAP_T2I', MAP_T2I, avgScore[2])
-        
+
         # # write to csv
         with open('HCAC/result/nus.csv', 'a') as f:
-            f.write('%s,%.3f,%.3f,%.3f,%.3f,%.3f, %.3f, %.3f\n' % (settings.DATASET,settings.K, settings.threshold, settings.l4,settings.l5,avgScore[3],avgScore[4], avgScore[3]+avgScore[4]))
-
+            # f.write('%s,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n' % (settings.DATASET,settings.alpha,settings.beta, settings.K,avgScore[3],avgScore[4], avgScore[3]+avgScore[4]))
+            f.write('%.3f,%.3f,%.3f,%.3f,%.3f\n' % (settings.LAMBDA1, settings.LAMBDA2, avgScore[3], avgScore[4], avgScore[3]+avgScore[4]) )
     def save_checkpoints(self, step, file_name='latest.pth'):
         ckp_path = osp.join(settings.MODEL_DIR, file_name)
         obj = {
@@ -506,7 +441,7 @@ class Session:
         self.logger.info('**********Save the trained model successfully.**********')
 
     
-    def load_checkpoints(self, file_name='%s_%dbit_%dbatch_best_checkpoint.pth' %(settings.DATASET, settings.CODE_LEN, settings.BATCH_SIZE)):
+    def load_checkpoints(self, file_name='latest.pth'):
         ckp_path = osp.join(settings.MODEL_DIR, file_name)
         try:
             obj = torch.load(ckp_path, map_location=lambda storage, loc: storage.cuda())
@@ -518,8 +453,7 @@ class Session:
         self.CodeNet_T.load_state_dict(obj['TxtNet'])
         self.logger.info('********** The loaded model has been trained for %d epochs.*********' % obj['step'])
 
-    
-    
+
 
 def main():
     # for random_id in range(30,50,1):
@@ -545,10 +479,8 @@ def main():
                 if (epoch + 1) % settings.EVAL_INTERVAL == 0:
                     sess.eval(avgScore)
                 # save the model
-                # if epoch + 1 == settings.NUM_EPOCH:
-                #     # sess.save_checkpoints(step=epoch+1)
-                #     sess.eval(avgScore, is_eval=False)
-
+                if epoch + 1 == settings.NUM_EPOCH:
+                    sess.save_checkpoints(step=epoch+1)
 
 
 def _main():
@@ -567,12 +499,11 @@ def _main():
             sess.eval(avgScore)
 
         else :
-            for epoch in range(100):
+            for epoch in range(30):
                 # train the Model
                 sess.train(epoch)
-                # settings.sssc = math.pow((1.0 * epoch + 1.0), 0.5)
                 # eval the Model
-                if epoch > 19 and epoch%5==0:
+                if epoch +1 == 30:
                     sess.eval(avgScore)
                 # save the model
                 # if epoch + 1 == settings.NUM_EPOCH:
@@ -586,89 +517,35 @@ def show():
         sess = Session()
         sess.show_disturbtion()
 
+def _main():
+
+        torch.manual_seed(30)
+        torch.cuda.manual_seed_all(30)
+        settings.logger.info('random seed id: %d'%30)
+        settings.logger.info('%.4f loss1, 1 loss2, %.4f loss3, %.4f loss4, %d bit, map@50!!!' % (settings.LAMBDA1, settings.LAMBDA2, settings.l4, settings.CODE_LEN))
+        sess = Session()
+        
+
+        avgScore = [0.0,0.0,0,0,0]
+
+        if settings.EVAL == True:
+            sess.load_checkpoints()
+            sess.eval(avgScore)
+
+        else :
+            for epoch in range(5):
+                # train the Model
+                sess.train(epoch)
+                # eval the Model
+                if epoch == 4:
+                    sess.eval(avgScore)
+                # save the model
+                if epoch + 1 == settings.NUM_EPOCH:
+                    sess.save_checkpoints(step=epoch+1)
+
 if __name__ == '__main__':
-    # for i in np.arange(-1,1,0.1):
-    #     settings.threshold = i
-        # for j in np.arange(1,20,1):
-        #     settings.K = j
-    main()
-    # for i in range(0,4):
-    #     settings.CODE_LEN = 2**i * 16
-
-
-    # lambda
-    # for i in np.arange(5.5,6.5,0.5):
-    #     settings.beta = i
-    #     _main()
-    
-    # for i in np.arange(0,5.5,0.5):
-    #     settings.alpha = i
-    #     _main()
-    # for a in np.arange(0,1,0.1):
-    #     for b in np.arange(0, 1-a, 0.1):
-    #         settings.a = a
-    #         settings.b = b
-    #         settings.c = 1-a-b
-    #         final_sim = cal_sim(S_I=S_I, S_T=S_T, S_F=S_high_crs) *  1.4
-    #         final_sim_test = cal_sim(S_I=S_I_test, S_T=S_T_test, S_F=S_high_crs_test) *  1.4
-
-    # for i in np.arange(1,8, 1):
-    #     settings.K = i
-    #     _main()
-
-    #     for j in np.arange(1,5,0.25):
-    #         settings.beta = j
-    #         for k in np.arange(1,4,1):
-    #             settings.K = k
-    #             _main()
-    # for settings.LAMBDA1 in np.arange(0.1,1,0.1):
-    #     for settings.LAMBDA2 in np.arange(0.1,1,0.1):
-    #         for settings.LAMBDA3 in np.arange(1,3,1):
-    #             for settings.l4 in np.arange(0.1,1,0.1):
-    #                 _main()
-    # main()
-
-    # show()
-    # show()
-    # show()
-    # for i in np.arange(0.1,1,0.1):
-    #     settings.A = i
-    #     for j in np.arange(0.1,1-i,0.1):
-    #         settings.B = j
-    #         settings.C = 1 - i - j
-    #         if settings.A + settings.B + settings.C == 1:
-    #             _main()
-
-    # for settings.LAMBDA1 in (0.1, 0.5, 1):
-    #     for settings.LAMBDA2 in (0.1, 0.5, 1):
-    #             for settings.l4 in np.arange(0.1, 0.5, 0.1):
-    #                 for settings.l5 in (0.005,0.0005,0.00005):
-    #                     _main()
-    # main()
-    # show()
-    # _main()
-    # for i in [128]:
-    #     settings.CODE_LEN = i
-    #     _main()
-
-    # # show()
-    # for i in [2,3,4,5,6,7,8,9]:
-    #     settings.K = i
-    #     _main()
-
-    # mir
-    # right mean:  -0.65399855
-    # right std:  0.24575287
-
-    # nus
-    # right mean:  -0.6359999
-    # right std:  0.30658692
-    # show()
-    # for i in np.arange(0,5,0.5):
-    #     settings.threshold = -0.6 + i * 0.24
-    #     # settings.threshold = -0.6 + i * 0.3
-    # #     _main()
-
     # for i in [16, 32, 64, 128]:
     #     settings.CODE_LEN = i
-    #     _main()
+    #     main()
+    # main()
+    show()

@@ -35,20 +35,22 @@ if DATASET == 'MIRFlickr':
     
     BETA = 0.9
     LAMBDA1 = 0.1
-    LAMBDA2 = 0.1
-    NUM_EPOCH = 100000
+    # LAMBDA2 = 0.1
+    LAMBDA2 = 1 
+    LAMBDA3 = 1
+    NUM_EPOCH = 10000
     LR_IMG = 0.001
     LR_TXT = 0.01
     EVAL_INTERVAL = 100
-
     alpha = 2.0
-    beta = 4.0
+    beta = 4.0 
     # threshold = 0.27
     # threshold = 0.05
     threshold = 0.200
 
     # threshold = 0.15
     K = 5
+    # K = 3
     
     
 
@@ -61,15 +63,19 @@ if DATASET == 'NUSWIDE':
     BETA = 0.6
     LAMBDA1 = 0.3
     LAMBDA2 = 0.3
-    NUM_EPOCH = 70
+    LAMBDA3 = 1
+    NUM_EPOCH = 45
     LR_IMG = 0.001
     LR_TXT = 0.01
-    EVAL_INTERVAL = 2
-
+    EVAL_INTERVAL = 1
+    alpha = 2.0
+    beta = 4.0
     # threshold = -1
-    threshold = -0.5
+    # threshold = -0.5
+    threshold = -0.240
 
-    K = 3
+    # K = 3
+    K = 5
 
 if DATASET == 'MSCOCO':
     LABEL_DIR = './data_pre/output/cocoLAll-8w.mat'
@@ -77,22 +83,29 @@ if DATASET == 'MSCOCO':
     IMG_DIR = './data_pre/output/cocoIAll-8w.mat'
     
     BETA = 0.6
+
     LAMBDA1 = 0.3
     LAMBDA2 = 0.3
-    NUM_EPOCH = 200
+    LAMBDA3 = 1
+    NUM_EPOCH = 20
     LR_IMG = 0.001
     LR_TXT = 0.01
     EVAL_INTERVAL = 1
 
     # threshold = -1
-    threshold = 0.5
+    threshold = 0.900
     K = 3
-
+    a = 0
+    b = 0
+    c = 0
 
 
 
 BATCH_SIZE = 128
-CODE_LEN = 16
+# BATCH_SIZE = 128
+# BATCH_SIZE = 64
+
+CODE_LEN = 128
 l4 = 0.3
 l5 = 0.0005
 sim1 = 1.4
@@ -103,8 +116,8 @@ MOMENTUM = 0.9
 WEIGHT_DECAY = 5e-4
 GPU_ID = 0
 NUM_WORKERS = 8
-EPOCH_INTERVAL = 2
-
+EPOCH_INTERVAL = 1
+sssc = 1.0 
 MODEL_DIR = './HCAC/checkpoint'
 
 
@@ -112,7 +125,7 @@ logger = logging.getLogger('train')
 logger.setLevel(logging.INFO)
 now = time.strftime("%Y%m%d%H%M%S",time.localtime(time.time())) 
 log_name = now + '_log.txt'
-log_dir = './HCAC/log'
+log_dir = './HCAC_copy/log'
 txt_log = logging.FileHandler(osp.join(log_dir, log_name))
 txt_log.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
